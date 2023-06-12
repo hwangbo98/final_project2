@@ -153,7 +153,7 @@ class personInRoom: public participant,
     boost::asio::io_context::strand& strand_;
     std::string room_name_;
     std::array<char, MAX_NICKNAME> nickname_;
-    std::array<char, MAX_BUFFER_SIZE> read_msg_;
+    Message read_msg_;
 
 public:
     personInRoom(tcp::socket socket, 

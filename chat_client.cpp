@@ -36,7 +36,7 @@ class client
 {
     boost::asio::io_context& io_context_;
     boost::asio::ssl::stream<tcp::socket> socket_;
-    std::array<char, MAX_BUFFER_SIZE> read_msg_;
+    Message read_msg_;
     std::array<char, MAX_NICKNAME> nickname_;
 
 public:
@@ -47,7 +47,7 @@ public:
             io_context_(io_context), socket_(io_context, context)
     {
         strcpy(nickname_.data(), nickname.data());
-        memset(read_msg_.data(), '\0', MAX_BUFFER_SIZE);
+        memset(read_msg_.data.data(), '\0', MAX_BUFFER_SIZE);
 
         socket_.set_verify_mode(boost::asio::ssl::verify_peer);
         socket_.set_verify_callback(
@@ -57,7 +57,7 @@ public:
         // boost::asio::async_connect(socket_, endpoints, boost::bind(&client::onConnect, this, _1));
     }
 
-    void write(const std::array<char, MAX_BUFFER_SIZE>& msg)
+    void write(Message& msg)
     {
         io_context_.post(boost::bind(&client::writeImpl, this, msg));
     }
@@ -127,17 +127,17 @@ private:
         
         if (!error)
         {
-            if(read_msg_.data()[0]=='-' && read_msg_.data()[1]=='f'){
+            if(read_msg_.data.data()[0]=='-' && read_msg_.data.data()[1]=='f'){
                 // -f<file_name> <content_size><content>
-                char * fname = strtok(read_msg_.data()+2, " ");
+                char * fname = strtok(read_msg_.data.data()+2, " ");
                 FILE * fp = fopen(fname, "ab");
                 // int pkt_size = MAX_BUFFER_SIZE-2-strlen(fname)-1-5;
                 char size[4];
-                strncpy(size, read_msg_.data()+2+strlen(fname)+1, 4);
+                strncpy(size, read_msg_.data.data()+2+strlen(fname)+1, 4);
                 int pkt_size = atoi(size);
                 // std::cout<<pkt_size<<".\n";
 
-                fwrite(read_msg_.data()+2+strlen(fname)+1+4, sizeof(char), pkt_size, fp);
+                fwrite(read_msg_.data.data()+2+strlen(fname)+1+4, sizeof(char), pkt_size, fp);
                 fclose(fp);
             }
             // int i = 
@@ -149,10 +149,10 @@ private:
             //     }
             // }
             else{
-                std::cout << read_msg_.data() << std::endl;
+                std::cout << read_msg_.data.data() << std::endl;
             }
             boost::asio::async_read(socket_,
-                                    boost::asio::buffer(read_msg_, read_msg_.size()),
+                                    boost::asio::buffer(read_msg_.data, read_msg_.data.size()),
                                     boost::bind(&client::readHandler, this, _1));
         } else
         {
@@ -348,7 +348,7 @@ int main(int argc, char* argv[])
 
         while (true)
         {
-            memset(msg.data.data(), '\0', msg.size());
+            memset(msg.data.data(), '\0', msg.data.size());
             if (!std::cin.getline(msg.data.data(), MAX_BUFFER_SIZE - PADDING - MAX_NICKNAME))
             {
                 std::cin.clear(); //clean up error bit and try to finish reading
