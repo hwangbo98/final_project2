@@ -14,12 +14,22 @@
 #include <boost/asio/ssl.hpp>
 #include <boost/thread/thread.hpp>
 #include <cstdio>
-// g++ chat_server.cpp -o server -std=c++11 -lboost_thread -lpthread
+#include "/usr/include/mysql/mysql.h"
 
 using boost::asio::ip::tcp;
 
 #define MAX_BUFFER_SIZE 1024
 #define MAX_NICKNAME 16
+
+MYSQL * conn_ptr;
+MYSQL_RES * res;
+MYSQL_ROW row;
+
+#define HOST "localhost"
+#define USER "root"
+#define PASS ""
+#define DATABASE "iot"
+
 struct Message {
   std::array<char, MAX_BUFFER_SIZE> data;
 
@@ -35,6 +45,54 @@ struct Message {
     return data.data();
   }
 };
+
+int db_init() {
+    conn_ptr = mysql_init(NULL);
+
+    if(!conn_ptr) {
+            std::cout<<"error\n";
+            exit(0);
+    }
+
+    conn_ptr = mysql_real_connect(conn_ptr, HOST, USER, PASS, DATABASE, 0, NULL, 0);
+
+    if(conn_ptr) {
+        std::cout<<"connect to db: SUCCESS\n";
+    }
+    else {
+        std::cout<<"connect error!\n";
+        std::cout<<"ERROR CODE: "<< mysql_errno(conn_ptr)<<std::endl;
+    }
+
+    if(mysql_select_db(conn_ptr, DATABASE) != 0){
+            mysql_close(conn_ptr);
+            std::cout<<"select_db fail.\n";
+            exit(1);
+    }
+    return 0;
+}
+int insert_sql(char * query){
+    if(mysql_query(conn_ptr, query)){
+        std::cout<<"insert query fail\n";
+        exit(1);
+    }
+    return 0;
+}
+int selectAll(){
+    char query[1024];
+    strcpy(query, "SELECT * FROM chat");
+    if(mysql_query(conn_ptr, query)){
+        std::cout<<"select query fail\n";
+        exit(1);
+    }
+
+    res = mysql_store_result(conn_ptr);
+    while( (row=mysql_fetch_row(res))!=NULL){
+        printf("%s %s %s %s\n", row[0], row[1], row[2], row[3]);
+    }
+    return 0;
+}
+
 namespace
 {
 class workerThread
@@ -276,6 +334,21 @@ private:
                 else{
                     auto room_ = room_table[room_name_];
                     room_->broadcast(read_msg_, shared_from_this());
+                    
+                    /* insert to table */
+                    char nickname_tmp[20];
+                    memset(nickname_tmp, 0, sizeof(char *)*20);
+                    strncpy(nickname_tmp, nickname_.data(), strlen(nickname_.data())-2);
+                    char sql[1024];
+                    strcpy(sql, "INSERT INTO chat(name, room, message, date) VALUES('");
+                    strcat(sql, nickname_tmp);
+                    strcat(sql, "', '");
+                    strcat(sql, room_name_.c_str());
+                    strcat(sql, "', '");
+                    strcat(sql, read_msg_.data.data());
+                    strcat(sql, "', CURRENT_TIMESTAMP)");
+                    std::cout<<sql<<"\n";
+                    insert_sql(sql);
 
                     boost::asio::async_read(socket_,
                                         boost::asio::buffer(read_msg_.data, read_msg_.data.size()),
@@ -410,6 +483,8 @@ int main(int argc, char* argv[])
             std::cerr << "Usage: chat_server <ip> <port>\n";
             return 1;
         }
+
+        db_init(); // for mysql database
 
         std::shared_ptr<boost::asio::io_context> io_context(new boost::asio::io_context);
         boost::shared_ptr<boost::asio::io_context::work> work(new boost::asio::io_context::work(*io_context));

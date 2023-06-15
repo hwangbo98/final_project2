@@ -1,6 +1,6 @@
 CC	=	g++
 CPPFLAGS	= 	-std=c++11 #-Wall 
-LIBS	=	-lboost_system -lcrypto -lssl -lpthread
+LIBS	=	-lboost_system -lcrypto -lssl -lpthread -lmysqlclient
 
 all : chat_client chat_server
 
