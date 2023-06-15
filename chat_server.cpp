@@ -485,7 +485,7 @@ int main(int argc, char* argv[])
         }
 
         db_init(); // for mysql database
-
+        // std::cout << "hi" << std::endl;
         std::shared_ptr<boost::asio::io_context> io_context(new boost::asio::io_context);
         boost::shared_ptr<boost::asio::io_context::work> work(new boost::asio::io_context::work(*io_context));
         boost::shared_ptr<boost::asio::io_context::strand> strand(new boost::asio::io_context::strand(*io_context));

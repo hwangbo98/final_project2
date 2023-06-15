@@ -121,12 +121,42 @@ private:
     //                                  boost::bind(&client::readHandler, this, _1));
     //     }
     // }
-
+    int find_first_space(Message& arr, int end_name, int length) {
+        for (int i = end_name+1; i < length; ++i) {
+            if (arr.data.data()[i] == ' ') {
+                return i;
+            }
+        }
+        return 0;
+    }
+    int find_first_space2(const std::array<char, MAX_NICKNAME>& arr, int length) {
+        for (int i = 0; i < length; ++i) {
+            if (arr.data()[i] == '\0') {
+                // std::cout << i << std::endl;
+                return i;
+            }
+        }
+        return 0;
+    }
     void readHandler(const boost::system::error_code& error)
     {
         
         if (!error)
         {
+            // int pos_last_name = 0; 
+            int nick_name_last = 0;
+            // int start_msg = 0;
+            // int msg_last = 0;
+            int first_space = 0;
+            int second_space = 0;
+            int third_space = 0;
+            nick_name_last = find_first_space2(nickname_, 16); // current client nickname length
+            // start_msg = nick_name_last + 2;
+            // msg_last = start_msg + 2 + nick_name_last;
+            first_space = find_first_space(read_msg_, 0, 100);
+            second_space = find_first_space(read_msg_, first_space+1, 100);
+            third_space = find_first_space(read_msg_, second_space+1, 100);
+            // std::cout << "space" << first_space << " "<< second_space << " " << third_space << std::endl;
             if(read_msg_.data.data()[0]=='-' && read_msg_.data.data()[1]=='f'){
                 // -f<file_name> <content_size><content>
                 char * fname = strtok(read_msg_.data.data()+2, " ");
@@ -140,17 +170,38 @@ private:
                 fwrite(read_msg_.data.data()+2+strlen(fname)+1+4, sizeof(char), pkt_size, fp);
                 fclose(fp);
             }
-            // int i = 
-            // elif(read_msg_.data()[0] == '-' && read_msg_.data()[1] == 's'){
-            //     while(1){
-            //         if(read_msg_.data()[i] == ''){
+           
+            else if(read_msg_.data.data()[first_space+1] == '-' && read_msg_.data.data()[first_space+2] == 's'){
+                // pos_last_name = find_first_space(read_msg_, start_msg, 100);
+                // std::cout << read_msg_.data.data()[second_space] << read_msg_.data.data()[third_space-1] << std::endl;
+                std::array<char, MAX_NICKNAME> data_substring;
+                // const auto data_length = pos_last_name - 7 + 1;
+                std::memcpy(data_substring.data(), read_msg_.data.data() + second_space+1, third_space-second_space-1);
+                data_substring[third_space-second_space-1] = '\0';
+                // std::cout << data_substring.data() << std::endl;
+                const auto result = std::strcmp(data_substring.data(), nickname_.data()) == 0;
+                Message specific_msg;
+                if(result){
+                    std::memcpy(specific_msg.data.data(), read_msg_.data.data() +0, first_space);
 
-            //         }
-            //     }
-            // }
+                    specific_msg.data[first_space] = ' ';
+
+                    std::memcpy(specific_msg.data.data() + first_space + 1, read_msg_.data.data() + third_space + 1, read_msg_.data.size());
+                    // std::cout << read_msg_.data.data() << std::endl;
+                    std::cout << "[secret] " << specific_msg.data.data() << std::endl;
+                    // std::cout << std::string(read_msg_.data.data() + pos_last_name + 2, read_msg_.data.data() +read_msg_.data.size()) << std::endl;
+                }
+                // else{
+                //     std::cout << "Nickname not exist\n" << std::endl;
+                //     std::cout << read_msg_.data.data() << std::endl;   
+                // }
+                
+            }
             else{
                 std::cout << read_msg_.data.data() << std::endl;
             }
+            // std::cout << read_msg_.data.data()[0] << read_msg_.data.data()[1] << std::endl;
+            // std::cout << "size of nickname : " << nickname_.size() << std::endl;
             boost::asio::async_read(socket_,
                                     boost::asio::buffer(read_msg_.data, read_msg_.data.size()),
                                     boost::bind(&client::readHandler, this, _1));
@@ -343,6 +394,7 @@ int main(int argc, char* argv[])
         Message msg;
         std::cout << "-------------------------------------\n";
         std::cout << "create chat room: -c <chat_room_name>\nenter chat room: -i <chat_room_name>\nleave chat room: -x\n";
+        std::cout << "Secrete chat room: -s <nick name> ~\n";
         std::cout << "send file: -f <file_name>\n";
         std::cout << "-------------------------------------\n\n";
 
