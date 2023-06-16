@@ -31,19 +31,19 @@ MYSQL_ROW row;
 #define DATABASE "iot"
 
 struct Message {
-  std::array<char, MAX_BUFFER_SIZE> data;
+    std::array<char, MAX_BUFFER_SIZE> data;
 
-  Message() {
-    data.fill('\0');
-  }
+    Message() {
+        data.fill('\0');
+    }
 
-  void set(const std::string& str) {
-    std::copy(str.begin(), str.end(), data.begin());
-  }
+    void set(const std::string& str) {
+        std::copy(str.begin(), str.end(), data.begin());
+    }
 
-  const char* c_str() const {
-    return data.data();
-  }
+    const char* c_str() const {
+        return data.data();
+    }
 };
 
 int db_init() {
@@ -131,7 +131,7 @@ public:
 };
 
 class chatRoom {
-    std::unordered_set<std::shared_ptr<participant>> participants_;
+    std::unordered_set<std::shared_ptr<participant>> participants_; // person in room list 
     std::unordered_set<std::shared_ptr<participant>> getParticipants(){
         return participants_;
     }
@@ -181,7 +181,7 @@ public:
             {
                 if(nickname != name_table_[(*iter)])
                     (*iter)->onMessage(std::ref(msg));
-                    // without std::ref -> image send file... why..???
+                    // without std::ref -> image send file... 
             }
 
             // std::for_each(participants_.begin(), participants_.end(),
@@ -196,12 +196,12 @@ public:
             std::for_each(participants_.begin(), participants_.end(),
                         boost::bind(&participant::onMessage, _1, std::ref(formatted_msg)));
         }
-
     }
 };
 
 std::unordered_set<std::shared_ptr<chatRoom>> chatRooms;
-std::unordered_map<std::string, std::shared_ptr<chatRoom>> room_table;
+std::unordered_set<std::shared_ptr<participant>> partis_waiting;
+std::unordered_map<std::string, std::shared_ptr<chatRoom>> room_table; // mapping room name & chatRoom
 
 
 class personInRoom: public participant,
@@ -225,9 +225,6 @@ public:
     void start()
     {
         do_handshake();
-        // boost::asio::async_read(socket_,
-        //                         boost::asio::buffer(nickname_, nickname_.size()),
-        //                         strand_.wrap(boost::bind(&personInRoom::nicknameHandler, shared_from_this(), _1)));
     }
 
     void onMessage(Message& msg)
@@ -240,6 +237,8 @@ public:
 private:
     void nicknameHandler(const boost::system::error_code& error)
     {
+        partis_waiting.insert(shared_from_this());
+
         strcat(nickname_.data(), ": ");
 
         // send chatting room list 
@@ -266,7 +265,19 @@ private:
                                 strand_.wrap(boost::bind(&personInRoom::readHandler, shared_from_this(), _1)));
     }
 
-    
+    // whenever there is new room, send chat lists to all participants 
+    void send_chatlists(){
+        Message formatted_msg;
+        memset(formatted_msg.data.data(), '\0', MAX_BUFFER_SIZE);
+        strcat(formatted_msg.data.data(), "Chatting rooms .. try to join a chatting room [-i <chat_room_name>]\n");
+        for(auto elem: room_table){
+            strcat(formatted_msg.data.data(), "\t- ");
+            strcat(formatted_msg.data.data(), elem.first.c_str());
+            strcat(formatted_msg.data.data(), "\n");
+        }
+        std::for_each(partis_waiting.begin(), partis_waiting.end(),
+                        boost::bind(&participant::onMessage, _1, std::ref(formatted_msg)));
+    }
 
     void do_handshake()
     {
@@ -293,6 +304,7 @@ private:
                 // leave chat room 
                 if(read_msg_.data.data()[0]=='-' && read_msg_.data.data()[1]=='x')
                 {
+                    partis_waiting.insert(shared_from_this());
                     // leave chat room 
                     auto room_ = room_table[room_name_];
                     room_->leave(shared_from_this());
@@ -320,22 +332,12 @@ private:
                                         boost::asio::buffer(read_msg_.data, read_msg_.data.size()),
                                         strand_.wrap(boost::bind(&personInRoom::readHandler, shared_from_this(), _1)));
                 }
-                // else if(read_msg_.data.data()[0] == '-' && read_msg_.data.data()[1]=='w'){
-                //     std::string msg_str(read_msg_.data.data());
-                //     std::istringstream iss(msg_str);
-
-                //     std::string cmd, receiver_nickname, message;
-                //     iss >> cmd >> receiver_nickname;
-                //     std::getline(iss, message);
-
-                //     whisper(receiver_nickname, message);
-                // }
                 // send message 
                 else{
                     auto room_ = room_table[room_name_];
                     room_->broadcast(read_msg_, shared_from_this());
                     
-                    /* insert to table */
+                    /* insert to data base table */
                     char nickname_tmp[20];
                     memset(nickname_tmp, 0, sizeof(char *)*20);
                     strncpy(nickname_tmp, nickname_.data(), strlen(nickname_.data())-2);
@@ -357,6 +359,7 @@ private:
             }
             // person does not enter any room yet...
             else{
+                partis_waiting.erase(shared_from_this());
                 // create a room 
                 if(read_msg_.data.data()[0]=='-' && read_msg_.data.data()[1]=='c')
                 {   
@@ -366,6 +369,8 @@ private:
                     std::shared_ptr<chatRoom> new_room(new chatRoom());
                     room_table[room_name_] = new_room;
                     new_room->enter(shared_from_this(), std::string(nickname_.data()));
+
+                    send_chatlists();
 
                     boost::asio::async_read(socket_,
                                         boost::asio::buffer(read_msg_.data, read_msg_.data.size()),
@@ -400,6 +405,7 @@ private:
             }
             
         }
+        // read error 
         else
         {
             if(room_name_.size()>0){
@@ -408,7 +414,6 @@ private:
             }
         }
     }
-
 
     void writeHandler(const boost::system::error_code& error)
     {

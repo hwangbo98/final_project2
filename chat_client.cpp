@@ -9,8 +9,6 @@
 #include <boost/asio/ssl.hpp>
 #include <chrono>
 #include <cstdio>
-
-// g++ chat_client.cpp -o client -std=c++11 -lboost_thread -lpthread
 using boost::asio::ip::tcp;
 
 #define MAX_BUFFER_SIZE 1024
@@ -32,6 +30,7 @@ struct Message {
     return data.data();
   }
 };
+
 class client
 {
     boost::asio::io_context& io_context_;
@@ -54,7 +53,6 @@ public:
             std::bind(&client::verify_certificate, this, std::placeholders::_1, std::placeholders::_2));
         
         ssl_connect(endpoints);
-        // boost::asio::async_connect(socket_, endpoints, boost::bind(&client::onConnect, this, _1));
     }
 
     void write(Message& msg)
@@ -78,6 +76,7 @@ private:
 
         return preverified;
     }
+    // tcp connection
     void ssl_connect(const tcp::resolver::results_type& endpoints)
     {
         boost::asio::async_connect(socket_.lowest_layer(), endpoints,
@@ -94,6 +93,7 @@ private:
             }
             });
     }
+    // tls handshake
     void handshake()
     {
         socket_.async_handshake(boost::asio::ssl::stream_base::client,
@@ -101,7 +101,7 @@ private:
             {
             if (!error)
             {
-                // send_request();
+                // send nickname to server
                 boost::asio::async_write(socket_,
                                      boost::asio::buffer(nickname_, nickname_.size()),
                                      boost::bind(&client::readHandler, this, _1));
@@ -112,15 +112,6 @@ private:
             }
             });
     }
-    // void onConnect(const boost::system::error_code& error)
-    // {
-    //     if (!error)
-    //     {
-    //         boost::asio::async_write(socket_,
-    //                                  boost::asio::buffer(nickname_, nickname_.size()),
-    //                                  boost::bind(&client::readHandler, this, _1));
-    //     }
-    // }
     int find_first_space(Message& arr, int end_name, int length) {
         for (int i = end_name+1; i < length; ++i) {
             if (arr.data.data()[i] == ' ') {
@@ -140,7 +131,6 @@ private:
     }
     void readHandler(const boost::system::error_code& error)
     {
-        
         if (!error)
         {
             // int pos_last_name = 0; 
@@ -157,28 +147,24 @@ private:
             second_space = find_first_space(read_msg_, first_space+1, 100);
             third_space = find_first_space(read_msg_, second_space+1, 100);
             // std::cout << "space" << first_space << " "<< second_space << " " << third_space << std::endl;
+
+            // receive file data
             if(read_msg_.data.data()[0]=='-' && read_msg_.data.data()[1]=='f'){
                 // -f<file_name> <content_size><content>
                 char * fname = strtok(read_msg_.data.data()+2, " ");
                 FILE * fp = fopen(fname, "ab");
-                // int pkt_size = MAX_BUFFER_SIZE-2-strlen(fname)-1-5;
                 char size[4];
                 strncpy(size, read_msg_.data.data()+2+strlen(fname)+1, 4);
                 int pkt_size = atoi(size);
-                // std::cout<<pkt_size<<".\n";
 
                 fwrite(read_msg_.data.data()+2+strlen(fname)+1+4, sizeof(char), pkt_size, fp);
                 fclose(fp);
             }
-           
+            // receive secret message
             else if(read_msg_.data.data()[first_space+1] == '-' && read_msg_.data.data()[first_space+2] == 's'){
-                // pos_last_name = find_first_space(read_msg_, start_msg, 100);
-                // std::cout << read_msg_.data.data()[second_space] << read_msg_.data.data()[third_space-1] << std::endl;
                 std::array<char, MAX_NICKNAME> data_substring;
-                // const auto data_length = pos_last_name - 7 + 1;
                 std::memcpy(data_substring.data(), read_msg_.data.data() + second_space+1, third_space-second_space-1);
                 data_substring[third_space-second_space-1] = '\0';
-                // std::cout << data_substring.data() << std::endl;
                 const auto result = std::strcmp(data_substring.data(), nickname_.data()) == 0;
                 Message specific_msg;
                 if(result){
@@ -197,11 +183,11 @@ private:
                 // }
                 
             }
+            // receive message
             else{
                 std::cout << read_msg_.data.data() << std::endl;
             }
-            // std::cout << read_msg_.data.data()[0] << read_msg_.data.data()[1] << std::endl;
-            // std::cout << "size of nickname : " << nickname_.size() << std::endl;
+            
             boost::asio::async_read(socket_,
                                     boost::asio::buffer(read_msg_.data, read_msg_.data.size()),
                                     boost::bind(&client::readHandler, this, _1));
@@ -213,73 +199,7 @@ private:
 
     void writeImpl(Message msg)
     {
-        // if(msg.data()[0]=='-' && msg.data()[1]=='f'){
-        //     FILE *fp;
-        //     size_t fsize; /* size of file */
-        //     char fname[MAX_FILENAME];
-        //     int num_pkt; /* total number of packet to send */
-        //     int pkt_size;
-        //     strcpy(fname, msg.data()+3);
-            
-        //     std::array<char, MAX_BUFFER_SIZE> formatted_msg;
-
-        //     if((fp = fopen(fname, "rb")) == NULL){
-        //         std::cout<< "File not exists ..\n";
-        //     }
-        //     else{
-        //         fseek(fp, 0, SEEK_END);
-        //         fsize = ftell(fp);
-        //         fseek(fp, 0, SEEK_SET);
-        //         pkt_size = MAX_BUFFER_SIZE-2-strlen(fname)-1-4; 
-        //         num_pkt = fsize/(pkt_size) + 1;
-        //         // -f<file_name> <size><content>
-        //         // <size> : 4 character 
-
-        //         for(int i=0; i<num_pkt; i++)
-        //         {
-        //             memset(formatted_msg.data(), 0x00, MAX_BUFFER_SIZE);
-        //             strcat(formatted_msg.data(), "-f");
-        //             strcat(formatted_msg.data(), fname);
-        //             strcat(formatted_msg.data(), " ");
-
-        //             int tmp_size = fread(formatted_msg.data()+2+strlen(fname)+1+4, sizeof(char), pkt_size, fp);
-        //             // sprintf(formatted_msg.data()+2+strlen(fname)+1, "%4d", tmp_size);
-        //             char s[5];
-        //             sprintf(s, "%4d", tmp_size);
-        //             formatted_msg.data()[2+strlen(fname)+1] = s[0];
-        //             formatted_msg.data()[2+strlen(fname)+2] = s[1];
-        //             formatted_msg.data()[2+strlen(fname)+3] = s[2];
-        //             formatted_msg.data()[2+strlen(fname)+4] = s[3];
-        //             // char tmp[pkt_size];
-        //             // int tmp_size = fread(tmp, sizeof(char), pkt_size, fp);
-        //             // sprintf(formatted_msg.data()+2+strlen(fname)+1, "%4d", tmp_size);
-        //             // strncpy(formatted_msg.data()+2+strlen(fname)+1+4, tmp, tmp_size);
-        //             // printf("%s.\n", formatted_msg.data());
-        //             // std::cout<<tmp_size<<".\n";
-
-        //             // char * ff = strtok(formatted_msg.data()+2, " ");
-        //             // FILE * test = fopen("test.png", "ab");
-        //             // char size[5];
-        //             // strncpy(size, formatted_msg.data()+2+strlen(ff)+1, 4);
-        //             // size[4] = '\0';
-        //             // int pp = atoi(size);
-        //             // std::cout<<pp<<".\n";
-        //             // int ww = fwrite(formatted_msg.data()+2+strlen(ff)+1+4, sizeof(char), pp, test);
-        //             // fclose(test);
-
-        //             boost::asio::async_write(socket_,
-        //                              boost::asio::buffer(formatted_msg, formatted_msg.size()),
-        //                              boost::bind(&client::writeHandler, this, _1)); 
-                
-        //         }
-        //         fclose(fp);
-        //     }
-        // }
-        // else {
-        //     boost::asio::async_write(socket_,
-        //                              boost::asio::buffer(msg, msg.size()),
-        //                              boost::bind(&client::writeHandler, this, _1));
-        // }
+        // send file 
         if(msg.data[0]=='-' && msg.data[1]=='f'){
             FILE *fp;
             size_t fsize; /* size of file */
@@ -318,31 +238,15 @@ private:
                     formatted_msg.data[2+strlen(fname)+2] = s[1];
                     formatted_msg.data[2+strlen(fname)+3] = s[2];
                     formatted_msg.data[2+strlen(fname)+4] = s[3];
-                    // char tmp[pkt_size];
-                    // int tmp_size = fread(tmp, sizeof(char), pkt_size, fp);
-                    // sprintf(formatted_msg.data()+2+strlen(fname)+1, "%4d", tmp_size);
-                    // strncpy(formatted_msg.data()+2+strlen(fname)+1+4, tmp, tmp_size);
-                    // printf("%s.\n", formatted_msg.data());
-                    // std::cout<<tmp_size<<".\n";
-
-                    // char * ff = strtok(formatted_msg.data()+2, " ");
-                    // FILE * test = fopen("test.png", "ab");
-                    // char size[5];
-                    // strncpy(size, formatted_msg.data()+2+strlen(ff)+1, 4);
-                    // size[4] = '\0';
-                    // int pp = atoi(size);
-                    // std::cout<<pp<<".\n";
-                    // int ww = fwrite(formatted_msg.data()+2+strlen(ff)+1+4, sizeof(char), pp, test);
-                    // fclose(test);
 
                     boost::asio::async_write(socket_,
                                      boost::asio::buffer(formatted_msg.data, formatted_msg.data.size()),
                                      boost::bind(&client::writeHandler, this, _1)); 
-                
                 }
                 fclose(fp);
             }
         }
+        // send message 
         else {
             boost::asio::async_write(socket_,
                                      boost::asio::buffer(msg.data, msg.data.size()),
